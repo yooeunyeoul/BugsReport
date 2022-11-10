@@ -1,69 +1,73 @@
+@file:OptIn(DelicateCoroutinesApi::class)
+
 package com.dongeul.httpconnection
 
-import android.content.Context
 import android.util.Log
-import android.widget.Toast
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import org.json.JSONObject
+import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 
 enum class ConnectionType {
-    POST, GET
+    POST, GET, PUT, DELETE
 }
 
-class HttpConnection {
-    lateinit var url: URL
-    var timeout: Int = 15000
-    fun toast(context: Context) {
-        Toast.makeText(context, "My Id : BESG,", Toast.LENGTH_SHORT).show()
+class HttpConnection(
+    address: String = "",
+    timeout: Int = 15000,
+    method: ConnectionType,
+    keyword: String = "default",
+    headers: List<Pair<String, String>>,
+    jsonObject: JSONObject = JSONObject()
+) {
+    private var mJsonObject: JSONObject = jsonObject
+    var mUrl: URL
+    var mTimeout: Int = timeout
+    lateinit var mAddress: String
+    var mMethod: ConnectionType = method
+    var mKeyword: String = keyword
+    var mHeaders: List<Pair<String, String>> = headers
+
+    init {
+        mUrl = URL("${address}/${keyword}")
+        requestHttpConnection()
     }
 
-    constructor(
-        address: String = "",
-        timeout: Int = 15000,
-        method: ConnectionType,
-        keyword: String
-    ) {
-        Log.d("ADDRES", "${address}${keyword}")
-        url = URL("${address}/${keyword}")
-        this@HttpConnection.timeout = timeout
-
-        when (method) {
-            ConnectionType.GET -> {
-                getMethod()
-            }
-            else -> {
-
-            }
-        }
-    }
-
-    private fun getMethod() {
+    private fun requestHttpConnection() {
         GlobalScope.launch(Dispatchers.IO) {
-            val httpURLConnection = url.openConnection() as HttpURLConnection
-            httpURLConnection.setRequestProperty(
-                "Accept",
-                "application/json"
-            ) // The format of response we want to get from the server
-            httpURLConnection.requestMethod = "GET"
-            httpURLConnection.doInput = true
-            httpURLConnection.doOutput = false
+            val httpURLConnection = mUrl.openConnection() as HttpURLConnection
+            httpURLConnection.run {
+                requestMethod = mMethod.name
+                doInput = true
+                doOutput = false
+            }
+            repeat(mHeaders.size) {
+                httpURLConnection.setRequestProperty(
+                    mHeaders[it].first,
+                    mHeaders[it].second
+                )
+            }
+
+            if (mMethod == ConnectionType.POST || mMethod == ConnectionType.PUT) {
+                val jsonObjectString = mJsonObject.toString()
+                val outputStreamWriter = OutputStreamWriter(httpURLConnection.outputStream)
+                outputStreamWriter.write(jsonObjectString)
+                outputStreamWriter.flush()
+            }
 
             val responseCode = httpURLConnection.responseCode
             if (responseCode == HttpURLConnection.HTTP_OK) {
                 val response = httpURLConnection.inputStream.bufferedReader()
                     .use { it.readText() }  // defaults to UTF-8
                 withContext(Dispatchers.Main) {
+                    val jsonObject = JSONObject(response)
+                    Log.d("Pretty Printed JSON :", jsonObject.toString())
+                    val title = jsonObject.getString("title")
+                    val type = jsonObject.getString("type")
 
-                    // Convert raw JSON to pretty JSON using GSON library
-//                    val gson = GsonBuilder().setPrettyPrinting().create()
-//                    val prettyJson = gson.toJson(JsonParser.parseString(response))
-//                    Log.d("Pretty Printed JSON :", prettyJson)
-
-                    Log.d("Pretty Printed JSON :", response)
+                    Log.d("title", title)
+                    Log.d("type", type)
 
 
                 }
@@ -71,6 +75,5 @@ class HttpConnection {
                 Log.e("HTTPURLCONNECTION_ERROR", responseCode.toString())
             }
         }
-
     }
 }

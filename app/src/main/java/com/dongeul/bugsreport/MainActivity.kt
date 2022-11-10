@@ -14,8 +14,15 @@ class MainActivity : AppCompatActivity() {
         HttpConnection(
             address = "https://en.wikipedia.org/api/rest_v1/page/summary",
             method = ConnectionType.GET,
-            keyword = "type"
+            keyword = "bugs",
+            timeout = 10000,
+            headers = listOf(
+                Pair(first = "Content-Type", "application/json"),
+                Pair(first = "Accept", second = "application/json")
+            )
         )
 
     }
 }
+
+
