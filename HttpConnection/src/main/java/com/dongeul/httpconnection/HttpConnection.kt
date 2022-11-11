@@ -13,44 +13,40 @@ enum class ConnectionType {
     POST, GET, PUT, DELETE
 }
 
+data class ReturnStatus(val code: Int, val data: String)
+
 class HttpConnection(
-    address: String = "",
-    timeout: Int = 15000,
-    method: ConnectionType,
-    keyword: String = "default",
-    headers: List<Pair<String, String>>,
-    jsonObject: JSONObject = JSONObject()
+    val address: String = "",
+    val timeout: Int = 15000,
+    val method: ConnectionType,
+    val keyword: String,
+    val headers: List<Pair<String, String>>,
+    val jsonObject: JSONObject = JSONObject()
 ) {
-    private var mJsonObject: JSONObject = jsonObject
-    var mUrl: URL
-    var mTimeout: Int = timeout
-    lateinit var mAddress: String
-    var mMethod: ConnectionType = method
-    var mKeyword: String = keyword
-    var mHeaders: List<Pair<String, String>> = headers
+    lateinit var mUrl: URL
+    private lateinit var returnStatus: ReturnStatus
 
-    init {
-        mUrl = URL("${address}/${keyword}")
-        requestHttpConnection()
-    }
-
-    private fun requestHttpConnection() {
-        GlobalScope.launch(Dispatchers.IO) {
+    suspend fun requestHttpConnection(): ReturnStatus {
+        val waitFor = CoroutineScope(Dispatchers.IO).async {
+            mUrl = URL("${address}/${keyword}")
+            Log.d("URL","${address}/${keyword}")
             val httpURLConnection = mUrl.openConnection() as HttpURLConnection
             httpURLConnection.run {
-                requestMethod = mMethod.name
+                requestMethod = method.name
                 doInput = true
                 doOutput = false
+                connectTimeout = timeout
+
             }
-            repeat(mHeaders.size) {
+            repeat(headers.size) {
                 httpURLConnection.setRequestProperty(
-                    mHeaders[it].first,
-                    mHeaders[it].second
+                    headers[it].first,
+                    headers[it].second
                 )
             }
 
-            if (mMethod == ConnectionType.POST || mMethod == ConnectionType.PUT) {
-                val jsonObjectString = mJsonObject.toString()
+            if (method == ConnectionType.POST || method == ConnectionType.PUT) {
+                val jsonObjectString = jsonObject.toString()
                 val outputStreamWriter = OutputStreamWriter(httpURLConnection.outputStream)
                 outputStreamWriter.write(jsonObjectString)
                 outputStreamWriter.flush()
@@ -61,19 +57,15 @@ class HttpConnection(
                 val response = httpURLConnection.inputStream.bufferedReader()
                     .use { it.readText() }  // defaults to UTF-8
                 withContext(Dispatchers.Main) {
-                    val jsonObject = JSONObject(response)
-                    Log.d("Pretty Printed JSON :", jsonObject.toString())
-                    val title = jsonObject.getString("title")
-                    val type = jsonObject.getString("type")
-
-                    Log.d("title", title)
-                    Log.d("type", type)
-
-
+                    returnStatus = ReturnStatus(code = HttpURLConnection.HTTP_OK, data = response)
                 }
             } else {
+                returnStatus = ReturnStatus(code = responseCode, data = "")
                 Log.e("HTTPURLCONNECTION_ERROR", responseCode.toString())
             }
+
         }
+        waitFor.await()
+        return returnStatus
     }
 }
